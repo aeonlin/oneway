@@ -44,11 +44,10 @@ public class Player extends oneway.sim.Player
             rlights[i] = false;
         }
 
-        boolean[] indanger = new boolean[nsegments+1];
-        
         // find out almost full parking lot
         findFullParkingLot(movingCars, left, right);
         /*
+        boolean[] indanger = new boolean[nsegments+1];
         for (int i = 1; i != nsegments; ++i) {
             if (left[i].size() + right[i].size() 
                 > capacity[i] * AlmostFull) {
