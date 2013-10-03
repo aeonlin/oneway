@@ -95,6 +95,9 @@ public class Player extends oneway.sim.Player
     }
 
     private void findFullParkingLot(MovingCar[] cars, Parking[] left, Parking[] right) {
+        //reset the indanger flag
+        for(int i=0; i<indanger.length;i++){ indanger[i]=false;}
+        //determine which parking lot is almost fuull
         int carsOnSegmentLeft[] = new int[nsegments];
         int carsOnSegmentRight[] = new int[nsegments];
         for(MovingCar car : cars) {
