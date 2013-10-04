@@ -107,7 +107,7 @@ public class Player extends oneway.sim.Player
 
         for (int i = 1; i != nsegments; ++i) {
             if (left[i].size() + right[i].size()
-                + carsOnSegmentRight[i-1] + carsOnSegmentLeft[i]
+                + carsOnSegmentRight[i-1] + carsOnSegmentLeft[i] + 2
                 > capacity[i] * AlmostFull) {
                 indanger[i] = true;
             }            
