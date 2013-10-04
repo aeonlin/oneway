@@ -28,6 +28,8 @@ public class Player extends oneway.sim.Player
                           boolean[] llights,
                           boolean[] rlights)
     {
+        this.left = left;
+        this.right = right;
         // Strategy:
         // 1. initially turn all traffic lights off
         // 2. check each parking lot
@@ -45,7 +47,7 @@ public class Player extends oneway.sim.Player
         }
 
         // find out almost full parking lot
-        findFullParkingLot(movingCars, left, right);
+        findFullParkingLot(movingCars);
         /*
         boolean[] indanger = new boolean[nsegments+1];
         for (int i = 1; i != nsegments; ++i) {
@@ -94,7 +96,7 @@ public class Player extends oneway.sim.Player
         return false;
     }
 
-    private void findFullParkingLot(MovingCar[] cars, Parking[] left, Parking[] right) {
+    private void findFullParkingLot(MovingCar[] cars) {
         //reset the indanger flag
         for(int i=0; i<indanger.length;i++){ indanger[i]=false;}
         //determine which parking lot is almost fuull
@@ -107,15 +109,37 @@ public class Player extends oneway.sim.Player
 
         for (int i = 1; i != nsegments; ++i) {
             if (left[i].size() + right[i].size()
-                + carsOnSegmentRight[i-1] + carsOnSegmentLeft[i] + 2
+                + carsOnSegmentRight[i-1] + carsOnSegmentLeft[i]
+                + isEmptyParkingLot(i-1,1)+isEmptyParkingLot(i+1,-1)
                 > capacity[i] * AlmostFull) {
                 indanger[i] = true;
             }            
         }
     }
 
+    private int isEmptyParkingLot(int parkingLotId, int dir) {
+        //dir = 1:  if there are any cars going right
+        //dir = -1: if there are any cars going left
+        //dir = 0:  if there are any cars in the parking lot
+        if(dir > 0 ) {
+            //for going right
+            if(right[parkingLotId].size() > 0) { return 1;}
+            else { return 0; }
+        }
+        if(dir < 0 ) {
+            //for going left
+            if(left[parkingLotId].size() > 0) { return 1;}
+            else { return 0; }
+        }
+        //for both directions
+        if(left[parkingLotId].size()+right[parkingLotId].size() > 0) { return 1;}
+            else { return 0; }
+    }
+
+
     private int nsegments;
     private int nblocks;
     private int[] capacity;
     private boolean[] indanger;
+    private Parking[] left, right;
 }
