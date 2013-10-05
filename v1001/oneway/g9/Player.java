@@ -97,8 +97,18 @@ public class Player extends oneway.sim.Player
 				// if both left and right is on
 				// find which dir is in more danger
 				if (rlights[i] && llights[i]) {
-					double lratio = 1.0 * (left[i+1].size() + right[i+1].size()) / capacity[i+1];
-					double rratio = 1.0 * (left[i].size() + right[i].size()) / capacity[i];
+					//calculate the occupation ratio of connected parking lot of segments #i
+					//lratio: parking lot #i+1 (going left)
+					//rratio: parking lot #i  (going right)
+					//note that the left[0] and right[nsegments] are never initialized
+					//so don't use them at all!
+					double lratio = 1.0 * left[i+1].size() / capacity[i+1];
+					double rratio = 1.0 * right[i].size() / capacity[i];
+					if(i!=0) { 
+						rratio += 1.0 * left[i].size() / capacity[i]; }
+					if(i!=nsegments-1) { 
+						lratio += 1.0 * right[i+1].size() / capacity[i+1]; }
+
 					if (lratio > rratio)
 						rlights[i] = false;
 					else if (lratio < rratio)
@@ -171,14 +181,10 @@ public class Player extends oneway.sim.Player
 
 	private boolean isinDeadlock(MovingCar[] cars) {
 		if (cars.length == 0) {
-			for (int i = 1; i < nsegments-1; i++) {
-				if (left[i].size() > 0 || right[i].size() > 0)
+			for (int i = 0; i < nsegments; i++) {
+				if (left[i+1].size() > 0 || right[i].size() > 0)
 					return true;
 			}
-			if (right[0].size() > 0)
-				return true;
-			if (left[nsegments-1].size() > 0)
-				return true;
 		}
 		return false;
 	}
