@@ -175,6 +175,10 @@ public class Player extends oneway.sim.Player
 				if (left[i].size() > 0 || right[i].size() > 0)
 					return true;
 			}
+			if (right[0].size() > 0)
+				return true;
+			if (left[nsegments-1].size() > 0)
+				return true;
 		}
 		return false;
 	}
@@ -200,7 +204,7 @@ public class Player extends oneway.sim.Player
 		int parking = -1;
 		int dir = 0;
 		int[] details = new int[2];
-		for (int l = 1; l < nsegments; l++) {
+		for (int l = 1; l <= nsegments; l++) {
 			if (left[l].size() > 0) {
 				//for (int i = 0; i < left[l].length; i++) {
 				if (maxWaited > left[l].get(0)) {
@@ -210,7 +214,7 @@ public class Player extends oneway.sim.Player
 				}
 			}
 			}
-			for (int r = 1; r < nsegments; r++) {
+			for (int r = 0; r < nsegments; r++) {
 				if (right[r].size() > 0) {
 					//for (int i = 0; i < right[r].length; i++) {
 					if (maxWaited > right[r].get(0)) {
