@@ -62,7 +62,8 @@ public class Player extends oneway.sim.Player
 		deadlock = isDeadlock(movingCars);
 		System.out.println("Deadlock: " +  deadlock);
 
-		if (deadlock != -1) {
+		//if (deadlock != -1) {
+		if (isinDeadlock(movingCars)) { 
 			int[] details = releaseCar(deadlock);
 			int parking = details[0];
 			int direction = details[1];
@@ -167,6 +168,16 @@ public class Player extends oneway.sim.Player
 		else { return 0; }
 	}
 
+
+	private boolean isinDeadlock(MovingCar[] cars) {
+		if (cars.length == 0) {
+			for (int i = 1; i < nsegments-1; i++) {
+				if (left[i].size() > 0 || right[i].size() > 0)
+					return true;
+			}
+		}
+		return false;
+	}
 
 	private int isDeadlock(MovingCar[] cars) {
 		for (int i = 1; i < nsegments; i++) {
