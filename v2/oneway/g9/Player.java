@@ -1,4 +1,4 @@
-package oneway.g9_yichen;
+package oneway.g9;
 
 import oneway.sim.MovingCar;
 import oneway.sim.Parking;
@@ -12,6 +12,9 @@ public class Player extends oneway.sim.Player
 	// if the parking lot is almost full
 	// it asks the opposite direction to yield
 	private static double AlmostFull = 1.0;
+	public static int emergencyModeTics = -1;
+	public static int emergencyModeDir = 0;
+	public static int emergencyPL = -1;
 
 	private int nsegments;
 	private int[] nblocks;
@@ -61,73 +64,162 @@ public class Player extends oneway.sim.Player
 		// This strategy avoids car crash, but it cannot guarantee all cars
 		// will be delivered in time and the parking lot is never full
 
-		for (int i = 0; i != nsegments; ++i) {
-			llights[i] = false;
-			rlights[i] = false;
-		}
 
-		// Sort the index of parking lot by how many cars are already parked inside
-		//Parked[] parkingLotIndex = new Parked[nsegments+1];
-		Parked[] parkingLotIndex = orderTheParkingLots(movingCars);
-		//Arrays.sort(parkingLotIndex);
-		System.out.print("parkingLot ordered by occupation:");
-		for(Parked p : parkingLotIndex) {
-			if( p!=null) {System.out.print(p.index+" ");}
+
+		if (emergencyModeTics > 0) {
+			System.out.println("\n\n*************In emergency mode");
+			emergencyModeTics--;
+			rlights [0] = false;
+			llights[nsegments-1] = false;
+			for (int i = emergencyPL; i < nsegments ; i++) {
+				rlights[i] = true;
+				//rlights[parking] = true;
+			}
+			for (int i = emergencyPL -1; i >= 0 ; i--) {
+				llights[i] = true;
+			}
+
+			// if (emergencyModeDir == 1) {
+			// 	rlights [0] = false;
+			// 	for (int i = emergencyPL; i < nsegments ; i++) {
+			// 		rlights[i] = true;
+			// 		//rlights[parking] = true;
+			// 	}
+			// }
+
+			// else {
+			// 	for (int i = emergencyPL -1; i >= 0 ; i--) {
+			// 		llights[i] = true;
+			// 	}
+			// 	//llights[parking-1] = true;
+			// 	llights[nsegments-1] = false;
+			// }
+
+
 		}
-		System.out.println();
-		System.out.print("penalty contribution in this order:");
-		for(Parked p : parkingLotIndex) {
-			if( p!=null) {System.out.print(p.penalty+" ");}
-		}
-		System.out.println();
-		// Go through all parking lots by the sorted order
-		// Turn the outbound lights green and see if there will be anything wrong
-		// If something is wrong, turn them back to red again
-		for(int i=0; i<=nsegments; i++) {
-			int index = parkingLotIndex[i].index;
-			if( index != nsegments && index != 0) {
-				if(left[index].size() >= right[index].size()) {
-					llights[index-1] = true;
-					if(!lightsAvailable(movingCars, llights, rlights)) {
-						llights[index-1] = false;
+		else {
+			int deadlock = isDeadlock(movingCars);
+			if (isinDeadlock(movingCars)) { 
+				System.out.println("\n\n*************In deadlock");
+				int[] details = releaseCar(deadlock);
+				int parking = details[0];
+				int direction = details[1];
+				System.out.println("parking lot:" + details[0] + " direction: " + details[1]);
+
+				rlights [0] = false;
+				llights[nsegments-1] = false;
+				for (int i = parking; i < nsegments ; i++) {
+					rlights[i] = true;
+					//rlights[parking] = true;
+				}
+				for (int i = parking - 1; i >=0 ; i--) {
+					llights[i] = true;
+				}
+
+				if (direction == 1) {
+					// rlights [0] = false;
+					// for (int i = parking; i < nsegments ; i++) {
+					// 	rlights[i] = true;
+					// 	//rlights[parking] = true;
+					// }
+					int tics = 0;
+					for (int i = parking; i < nsegments; i++) {
+						tics = tics + nblocks[i];
 					}
-					rlights[index] = true;
-					if(!lightsAvailable(movingCars, llights, rlights)) {
-						rlights[index] = false;
-					}
+					emergencyModeTics = tics;
+					emergencyModeDir = 1;
 				}
 				else {
-					rlights[index] = true;
-					if(!lightsAvailable(movingCars, llights, rlights)) {
-						rlights[index] = false;
+					// for (int i = parking - 1; i >=0 ; i--) {
+					// 	llights[i] = true;
+					// }
+					// //llights[parking-1] = true;
+					// llights[nsegments-1] = false;
+					int tics = 0;
+					for (int i = parking - 1; i >= 0; i--) {
+						tics = tics + nblocks[i];
 					}
-					llights[index-1] = true;
-					if(!lightsAvailable(movingCars, llights, rlights)) {
-						llights[index-1] = false;
-					}	
-				}
+					emergencyModeTics = tics;
+					emergencyModeDir = -1;
+					
+				} 
+				emergencyPL = parking;
+
 			}
-			if(index == 0 ) {
-				rlights[index] = true;
-				if(!lightsAvailable(movingCars, llights, rlights)) {
-					rlights[index] = false;
+
+			else {
+
+
+
+				for (int i = 0; i != nsegments; ++i) {
+					llights[i] = false;
+					rlights[i] = false;
 				}
-			}
-			if(index == nsegments) {
-				llights[index-1] = true;
-				if(!lightsAvailable(movingCars, llights, rlights)) {
-					llights[index-1] = false;
-				}	
+
+				// Sort the index of parking lot by how many cars are already parked inside
+				//Parked[] parkingLotIndex = new Parked[nsegments+1];
+				Parked[] parkingLotIndex = orderTheParkingLots(movingCars);
+				//Arrays.sort(parkingLotIndex);
+				System.out.print("parkingLot ordered by occupation:");
+				for(Parked p : parkingLotIndex) {
+					if( p!=null) {System.out.print(p.index+" ");}
+				}
+				System.out.println();
+				System.out.print("penalty contribution in this order:");
+				for(Parked p : parkingLotIndex) {
+					if( p!=null) {System.out.print(p.penalty+" ");}
+				}
+				System.out.println();
+				// Go through all parking lots by the sorted order
+				// Turn the outbound lights green and see if there will be anything wrong
+				// If something is wrong, turn them back to red again
+				for(int i=0; i<=nsegments; i++) {
+					int index = parkingLotIndex[i].index;
+					if( index != nsegments && index != 0) {
+						if(left[index].size() >= right[index].size()) {
+							llights[index-1] = true;
+							if(!lightsAvailable(movingCars, llights, rlights)) {
+								llights[index-1] = false;
+							}
+							rlights[index] = true;
+							if(!lightsAvailable(movingCars, llights, rlights)) {
+								rlights[index] = false;
+							}
+						}
+						else {
+							rlights[index] = true;
+							if(!lightsAvailable(movingCars, llights, rlights)) {
+								rlights[index] = false;
+							}
+							llights[index-1] = true;
+							if(!lightsAvailable(movingCars, llights, rlights)) {
+								llights[index-1] = false;
+							}	
+						}
+					}
+					if(index == 0 ) {
+						rlights[index] = true;
+						if(!lightsAvailable(movingCars, llights, rlights)) {
+							rlights[index] = false;
+						}
+					}
+					if(index == nsegments) {
+						llights[index-1] = true;
+						if(!lightsAvailable(movingCars, llights, rlights)) {
+							llights[index-1] = false;
+						}	
+					}
+				}
+				// recalculate the next tic parkinglot occupation status for current light settings
+				willExceedLimit(movingCars, llights, rlights);
+				System.out.println("traffic:");
+				for(int i = 0; i<nsegments; i++) {
+					System.out.print("r"+i+":"+rightTraffic[i]+", ");
+					System.out.print("L"+i+":"+leftTraffic[i]+", ");
+				}
+				System.out.println("");
 			}
 		}
-		// recalculate the next tic parkinglot occupation status for current light settings
-		willExceedLimit(movingCars, llights, rlights);
-		System.out.println("traffic:");
-		for(int i = 0; i<nsegments; i++) {
-			System.out.print("r"+i+":"+rightTraffic[i]+", ");
-			System.out.print("L"+i+":"+leftTraffic[i]+", ");
-		}
-		System.out.println("");
 		// check if there is deadlock and deal with it
 
 /*
