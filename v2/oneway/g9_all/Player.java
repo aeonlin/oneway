@@ -156,7 +156,6 @@ public class Player extends oneway.sim.Player
 
 		if (emergencyModeTics > 0) {
 			System.out.println("\n\n*************In emergency mode");
-			emergencyModeTics--;
 			rlights [0] = false;
 			llights[nsegments-1] = false;
 			for (int i = emergencyPL; i < nsegments ; i++) {
@@ -165,6 +164,12 @@ public class Player extends oneway.sim.Player
 			}
 			for (int i = emergencyPL -1; i >= 0 ; i--) {
 				llights[i] = true;
+			}			
+			emergencyModeTics--;
+			if( 0 == emergencyModeTics) {
+				if(!lightsAvailable(movingCars, llights, rlights)) {
+					emergencyModeTics = 1;
+				}	
 			}
 
 			// if (emergencyModeDir == 1) {
@@ -182,8 +187,6 @@ public class Player extends oneway.sim.Player
 			// 	//llights[parking-1] = true;
 			// 	llights[nsegments-1] = false;
 			// }
-
-
 		}
 		else {
 			int deadlock = isDeadlock(movingCars);
@@ -239,10 +242,10 @@ public class Player extends oneway.sim.Player
 					llights[i] = false;
 					rlights[i] = false;
 				}
-				// Sort the index of parking lot by how many cars are already parked inside
-				//Parked[] parkingLotIndex = new Parked[nsegments+1];
+				// Sort the index of parking lot 
+				// by the sum of expected penalty of cars related to each parking lot
 				Parked[] parkingLotIndex = orderTheParkingLots(movingCars);
-				//Arrays.sort(parkingLotIndex);
+
 				System.out.print("parkingLot ordered by occupation:");
 				for(Parked p : parkingLotIndex) {
 					if( p!=null) {System.out.print(p.index+" ");}
