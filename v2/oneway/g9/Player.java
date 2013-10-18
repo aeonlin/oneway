@@ -23,52 +23,162 @@ public class Player extends oneway.sim.Player
 	private Parking[] left, right;
 	private int[] leftTraffic, rightTraffic;
 
+	// expected penalty calculation
 	private int minTime;
 	private int timeNow;
+	// to deal with the zero size parking lot: 
+	// Ignore its usage, treat it like a 0-length road segment.
+	private int[] parkingLotIndexMapping;
+	private int[] reverseLotIndexMapping;
+	private int nsegments_sim;
+	private int[] nblocks_sim;
 
 	public Player() {}
 
 	public void init(int nsegments, int[] nblocks, int[] capacity)
 	{
-		this.nsegments = nsegments;
-		this.nblocks = nblocks;
-		this.capacity = capacity.clone();
-		this.indanger = new boolean[nsegments+1];
-		this.leftTraffic = new int[nsegments];
-		this.rightTraffic = new int[nsegments];
+		this.nsegments = 0;
+		for(int i = 1 ; i <= nsegments ; i++) {
+			if( 0 != capacity[i]) {
+				this.nsegments++;
+			}
+		}
+		nsegments_sim = nsegments;
+		nblocks_sim = nblocks;
+		this.nblocks = new int[this.nsegments];
+		this.capacity = new int [this.nsegments+1];
+		parkingLotIndexMapping = new int[nsegments+1];
+		reverseLotIndexMapping = new int[this.nsegments+1];
+		for(int i = 0, j = 0; i <= nsegments ; i++) {
+			parkingLotIndexMapping[i] = -1;
+			if( 0 != capacity[i]) {
+				this.capacity[j] = capacity[i];
+				parkingLotIndexMapping[i] = j;
+				reverseLotIndexMapping[j] = i;
+				j++;
+			}
+			if( i != nsegments) {
+				this.nblocks[j-1] += nblocks[i];
+			}
+		}
+
+		left = new Parking[this.nsegments+1];
+		right = new Parking[this.nsegments+1];
+		this.indanger = new boolean[this.nsegments+1];
+		this.leftTraffic = new int[this.nsegments];
+		this.rightTraffic = new int[this.nsegments];
 		minTime = 0;
-		for(int n: nblocks) {
+		for(int n: this.nblocks) {
 			minTime += n;
 		}
 		timeNow = 0;
 	}
 
+	// the mapping / reverse mapping modules for ignoring the 0-size parking lot
+	private MovingCar mapPosition(MovingCar movingCar_sim){
+		int seg = movingCar_sim.segment;
+		int blk = movingCar_sim.block;
+		int dir = movingCar_sim.dir;
+		int sTime = movingCar_sim.startTime;
+		while(parkingLotIndexMapping[seg] < 0) {
+			seg--;
+			blk += nblocks_sim[seg];
+		}
+		seg = parkingLotIndexMapping[seg];
+		MovingCar c = new MovingCar(seg,blk,dir,sTime);
+		return c;
+	}
+	private void mapParkingLot(Parking[] p_sim, Parking[] p){
+		for(int i = 0; i <= nsegments_sim ; i++) {
+			int j = parkingLotIndexMapping[i];
+			if(j >= 0) {
+				if(p_sim[i] != null) {
+					p[j] = new Parking(p_sim[i]);
+				}
+				else {
+					p[j] = new Parking();
+				}
+			}
+		}
+	}
+	private void reverseMapLights(boolean[] lights, boolean[] lights_sim, int dir) {
+		int offset = (dir > 0) ? 0 : 1;
+		for(int i = 0; i < nsegments_sim; i++) {
+			int j = parkingLotIndexMapping[i+offset];
+			if( j >= 0 ) {
+				j -= offset;
+				lights_sim[i] = lights[j];
+			}
+			else {
+				lights_sim[i] = true;
+			}
+		}
+	}
 
-	public void setLights(MovingCar[] movingCars,
-			Parking[] left,
-			Parking[] right,
-			boolean[] llights,
-			boolean[] rlights)
+
+	public void setLights(MovingCar[] movingCars_sim,
+			Parking[] left_sim,
+			Parking[] right_sim,
+			boolean[] llights_sim,
+			boolean[] rlights_sim)
 	{
 		timeNow++;
+		boolean setNewStrategy = false;
+		boolean zerocapacity = false;
 		this.left = left;
 		this.right = right;
+
+		for (int i = 1; i < nsegments; i++) {
+			if (((nblocks[i-1])/2 + (nblocks[i])/2) >= (2*capacity[i])) {
+				setNewStrategy = true;
+				break;
+			}
+		}
+
+		System.out.println("Parking lots: " + parkingLotIndexMapping.length);
+		for (int i = 1; i < nsegments; i++) {
+			if (parkingLotIndexMapping[i] == -1) {
+				zerocapacity = true;
+				break;
+			}
+		}
+
+		if (setNewStrategy && !zerocapacity) {
+			strategy1(timeNow, movingCars_sim, left_sim, right_sim, llights_sim, rlights_sim);
+		}
+		else{
+
 		// Strategy:
+		// 0. Ignoring any parking lots with 0 capacity.
+		//    Treat those parking lots as 0-length road segments,
+		//	  and always set the adjacent outbound lights green.
 		// 1. initially turn all traffic lights off
-		// 2. check each parking lot
-		//    if it has pending cars, try to turn the light green
-		//    a) if there is no opposite traffic, go ahead and turn right
-		//    b) if there is opposite traffic, but the parking lot is piled up
-		//       turn red the opposite traffic light.
-		//       resume turning the traffic light after the traffic is clear
-		// This strategy avoids car crash, but it cannot guarantee all cars
-		// will be delivered in time and the parking lot is never full
+		// 2. sort the parking lot by the expected penalty of all cars it related to
+		// 3. in the sorted order, check each parking lot 
+		//	  to see if we can turn any outbound light to green without
+		//	  making the following accidents:
+		//	  a) the cars crash
+		//	  b) the parking lot will inevitably full some tics after
+		// 4. if no cars are moving but there are still cars in the system,
+		//	  then a "deadlock" happens. A deadlock dealing strategy is then applied.
 
-
+		// Map a 0-size parking lot configuration to 
+		// an equivalent configuration without any 0-size parking lots
+		MovingCar[] movingCars = new MovingCar[movingCars_sim.length];
+		for(int i = 0; i < movingCars_sim.length; i++) {
+			movingCars[i] = mapPosition(movingCars_sim[i]);
+		}
+		System.out.println("= setLights =");
+		mapParkingLot(left_sim, left);
+		mapParkingLot(right_sim, right);
+		boolean[] llights = new boolean[nsegments];
+		boolean[] rlights = new boolean[nsegments];
+		// End of mapping. 
+		// The reverse configuration mapping will be implemented 
+		// at the end of this setLights() function.
 
 		if (emergencyModeTics > 0) {
 			System.out.println("\n\n*************In emergency mode");
-			emergencyModeTics--;
 			rlights [0] = false;
 			llights[nsegments-1] = false;
 			for (int i = emergencyPL; i < nsegments ; i++) {
@@ -77,6 +187,12 @@ public class Player extends oneway.sim.Player
 			}
 			for (int i = emergencyPL -1; i >= 0 ; i--) {
 				llights[i] = true;
+			}			
+			emergencyModeTics--;
+			if( 0 == emergencyModeTics) {
+				if(!lightsAvailable(movingCars, llights, rlights)) {
+					emergencyModeTics = 1;
+				}	
 			}
 
 			// if (emergencyModeDir == 1) {
@@ -94,8 +210,6 @@ public class Player extends oneway.sim.Player
 			// 	//llights[parking-1] = true;
 			// 	llights[nsegments-1] = false;
 			// }
-
-
 		}
 		else {
 			int deadlock = isDeadlock(movingCars);
@@ -144,22 +258,17 @@ public class Player extends oneway.sim.Player
 					
 				} 
 				emergencyPL = parking;
-
 			}
 
 			else {
-
-
-
 				for (int i = 0; i != nsegments; ++i) {
 					llights[i] = false;
 					rlights[i] = false;
 				}
-
-				// Sort the index of parking lot by how many cars are already parked inside
-				//Parked[] parkingLotIndex = new Parked[nsegments+1];
+				// Sort the index of parking lot 
+				// by the sum of expected penalty of cars related to each parking lot
 				Parked[] parkingLotIndex = orderTheParkingLots(movingCars);
-				//Arrays.sort(parkingLotIndex);
+
 				System.out.print("parkingLot ordered by occupation:");
 				for(Parked p : parkingLotIndex) {
 					if( p!=null) {System.out.print(p.index+" ");}
@@ -220,79 +329,11 @@ public class Player extends oneway.sim.Player
 				System.out.println("");
 			}
 		}
-		// check if there is deadlock and deal with it
 
-/*
-		int deadlock = -1;
-		deadlock = isDeadlock(movingCars);
-		System.out.println("Deadlock: " +  deadlock);
-
-		//if (deadlock != -1) {
-		if (isinDeadlock(movingCars)) { 
-			int[] details = releaseCar(deadlock);
-			int parking = details[0];
-			int direction = details[1];
-			System.out.println("parking lot:" + details[0] + " direction: " + details[1]);
-			if (direction == 1) {
-				rlights[parking] = true;
-			}
-			else {
-				llights[parking-1] = true;
-			} 
+		//do the inverse mapping back to a possibly containing zero-size parking lot config
+		reverseMapLights(rlights, rlights_sim, 1);
+		reverseMapLights(llights, llights_sim, -1);
 		}
-*/
-
-		/*
-		else {
-			for (int i = 0; i != nsegments; ++i) {
-				// if right bound has car
-				// and the next parking lot is not in danger
-				if (right[i].size() > 0 &&
-						!indanger[i+1] &&
-						!hasTraffic(movingCars, i, -1)) {
-                                        System.out.println("Right: " + i);
-					rlights[i] = true;
-				}
-
-				if (left[i+1].size() > 0 &&
-						!indanger[i] &&
-						!hasTraffic(movingCars, i, 1)) {
-                                        System.out.println("Left: " + i);
-					llights[i] = true;
-				}
-
-				// if both left and right is on
-				// find which dir is in more danger
-				if (rlights[i] && llights[i]) {
-					//calculate the occupation ratio of connected parking lot of segments #i
-					//lratio: parking lot #i+1 (going left)
-					//rratio: parking lot #i  (going right)
-					//note that the left[0] and right[nsegments] are never initialized
-					//so don't use them at all!
-					double lratio = 1.0 * left[i+1].size() / capacity[i+1];
-					double rratio = 1.0 * right[i].size() / capacity[i];
-					if(i!=0) { 
-						rratio += 1.0 * left[i].size() / capacity[i]; }
-					if(i!=nsegments-1) { 
-						lratio += 1.0 * right[i+1].size() / capacity[i+1]; }
-
-					if (lratio > rratio)
-						rlights[i] = false;
-					else if (lratio < rratio)
-						llights[i] = false;
-					else {
-						if (left[i+1].get(0) < right[i].get(0)) {
-							rlights[i] = false;
-							llights[i] = true;
-						}
-						else {
-							llights[i] = false;
-							rlights[i] = true;
-						}
-                                        }
-				}
-			}
-		}*/
 	}
 
 
@@ -358,7 +399,7 @@ public class Player extends oneway.sim.Player
 				//moving left
 				optimumTime += blocksToLeftEnd[c.segment] + c.block + 1;
 				if( i != 0) {
-					int extraWait = (c.block + 1 + queueTimeInLotRight[i]) - nblocks[i];
+					int extraWait = queueTimeInLotLeft[i] - (c.block + 1);
 					if( extraWait > 0) {
 						optimumTime += extraWait;
 					}
@@ -573,6 +614,29 @@ public class Player extends oneway.sim.Player
 		details[1] = dir;
 		return details;
 	}
+	
+	private void strategy1(int timeNow,
+			MovingCar[] movingCars,
+			Parking[] left,
+			Parking[] right,
+			boolean[] llights,
+			boolean[] rlights)
+	{
+		if (timeNow == 1 || right[0].size() > 0) {
+			for (int i = 0; i < nsegments; i++) {
+				rlights[i] = true;
+				llights[i] = false;
+			}
+		}
+		else {
+			if (movingCars.length == 0) {
+				for (int i = 0; i < nsegments; i++) {
+					llights[i] = true;
+					rlights[i] = false;
+				}
+			}
+		}
+	}
 
 }
 
@@ -600,4 +664,5 @@ class Parked implements Comparable<Parked>{
 		if(this.penalty > p.penalty) { return -1;}
 		return 0;
 	}
+		
 }
